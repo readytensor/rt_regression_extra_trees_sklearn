@@ -10,6 +10,7 @@ from src.schema.data_schema import RegressionSchema
 from src.serve import create_app
 from src.serve_utils import get_model_resources
 from src.train import run_training
+from src.xai.explainer import RegressionExplainer
 
 
 @pytest.fixture
@@ -248,6 +249,23 @@ def test_key(sample_test_data, schema_provider):
 
 
 @pytest.fixture
+def explainer_config(config_dir_path):
+    json_file_path = os.path.join(config_dir_path, "explainer.json")
+    with open(json_file_path, "r", encoding="utf-8") as file:
+        config = json.load(file)
+    return config
+
+
+@pytest.fixture
+def explainer_config_file_path(explainer_config, tmpdir):
+    """Fixture to create and save a sample explainer_config json"""
+    config_file_path = tmpdir.join("explainer.json")
+    with open(config_file_path, "w", encoding="utf-8") as file:
+        json.dump(explainer_config, file)
+    return str(config_file_path)
+
+
+@pytest.fixture
 def test_resources_dir_path(tmpdir):
     """Define a fixture for the path to the test_resources directory."""
     tmpdir.mkdir("test_resources")
@@ -258,6 +276,7 @@ def test_resources_dir_path(tmpdir):
 @pytest.fixture
 def config_file_paths_dict(
     default_hyperparameters_file_path,
+    explainer_config_file_path,
     hpt_specs_file_path,
     model_config_file_path,
     preprocessing_config_file_path,
@@ -265,6 +284,7 @@ def config_file_paths_dict(
     """Define a fixture for the paths to all config files."""
     return {
         "default_hyperparameters_file_path": default_hyperparameters_file_path,
+        "explainer_config_file_path": explainer_config_file_path,
         "hpt_specs_file_path": hpt_specs_file_path,
         "model_config_file_path": model_config_file_path,
         "preprocessing_config_file_path": preprocessing_config_file_path,
@@ -281,6 +301,7 @@ def resources_paths_dict(test_resources_dir_path, model_config_file_path):
             test_resources_dir_path, "preprocessing"
         ),
         "model_config_file_path": model_config_file_path,
+        "explainer_dir_path": os.path.join(test_resources_dir_path, "explainer"),
         "hpt_results_dir_path": os.path.join(test_resources_dir_path, "hpt"),
         "predictions_file_path": os.path.join(
             test_resources_dir_path, "predictions.csv"
@@ -368,7 +389,7 @@ def app(
         config_file_paths_dict (dict): Dictionary containing the paths to the
             configuration files.
         resources_paths_dict (dict): Dictionary containing the paths to the
-            resources files such as trained models, encoders.
+            resources files such as trained models, encoders, and explainers.
     """
     # extract paths to all config files
     model_config_file_path = config_file_paths_dict["model_config_file_path"]
@@ -379,12 +400,14 @@ def app(
         "default_hyperparameters_file_path"
     ]
     hpt_specs_file_path = config_file_paths_dict["hpt_specs_file_path"]
+    explainer_config_file_path = config_file_paths_dict["explainer_config_file_path"]
 
     # Create temporary paths for all outputs/artifacts
     saved_schema_dir_path = resources_paths_dict["saved_schema_dir_path"]
     preprocessing_dir_path = resources_paths_dict["preprocessing_dir_path"]
     predictor_dir_path = resources_paths_dict["predictor_dir_path"]
     hpt_results_dir_path = resources_paths_dict["hpt_results_dir_path"]
+    explainer_dir_path = resources_paths_dict["explainer_dir_path"]
 
     # Run the training process without hyperparameter tuning
     run_tuning = False
@@ -400,6 +423,8 @@ def app(
         run_tuning=run_tuning,
         hpt_specs_file_path=hpt_specs_file_path if run_tuning else None,
         hpt_results_dir_path=hpt_results_dir_path if run_tuning else None,
+        explainer_config_file_path=explainer_config_file_path,
+        explainer_dir_path=explainer_dir_path,
     )
 
     # create model resources dictionary
